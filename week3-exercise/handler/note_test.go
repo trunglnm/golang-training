@@ -3,12 +3,13 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
-	"strconv"
 
 	mock "../mock"
 	"../model"
@@ -28,7 +29,7 @@ func fakeString(n int) string {
 
 func buildMockContext(method string, path string, data string) *gin.Context {
 	w := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(w)	
+	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = httptest.NewRequest(method, path, strings.NewReader(data))
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	return ctx
@@ -43,10 +44,23 @@ func Test_NoteCreate_TitleIsEmpty(t *testing.T) {
 	_, err := NoteCreate(ctx, noteRepo)
 	// 3. Kiem tra ket qua la dung nhu mong doi
 	if err == nil {
-		t.Error("Error should not be nil")
+		t.Fail()
 	}
 }
 
+func Test_NoteCreate_TitleIsNotEmpty(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	// 1. Chuan bi input dau vao cho ham CreateNote
+	data := `{"title": "todo 123","completed": false}`
+	ctx := buildMockContext("POST", "/note", data)
+	noteRepo := new(mock.NoteRepoImpl)
+	// 2. Goi function can test
+	_, err := NoteCreate(ctx, noteRepo)
+	// 3. Kiem tra ket qua la dung nhu mong doi
+	if err != nil {
+		t.Fail()
+	}
+}
 func Test_NoteCreate_TitleHasMinLength(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	// 1. Chuan bi input dau vao cho ham CreateNote
@@ -55,9 +69,11 @@ func Test_NoteCreate_TitleHasMinLength(t *testing.T) {
 	noteRepo := new(mock.NoteRepoImpl)
 	// 2. Goi function can test
 	_, err := NoteCreate(ctx, noteRepo)
+
+	fmt.Println("err", err.Error())
 	// 3. Kiem tra ket qua la dung nhu mong doi
 	if err == nil {
-		t.Error("Error should not be nil")
+		t.Fail()
 	}
 }
 
@@ -148,7 +164,6 @@ func Test_NoteCreate_TitleMaxLengthWithCorrectError(t *testing.T) {
 	}
 }
 
-
 func Test_NoteUpdate_TitleMaxLengthIsHitLimit(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	// 1.1 "[Editted] " len=10 + 245 = 255 still ok
@@ -156,16 +171,16 @@ func Test_NoteUpdate_TitleMaxLengthIsHitLimit(t *testing.T) {
 	id := 1
 	data := `{"title": "` + title + `","completed": false}`
 	ctx := buildMockContext("PUT", "/note/"+strconv.Itoa(id), data)
-	ctx.Params = append(ctx.Params,gin.Param{"id", strconv.Itoa(id)})
+	ctx.Params = append(ctx.Params, gin.Param{"id", strconv.Itoa(id)})
 	// 1.2 Mock db
 	noteRepo := new(mock.NoteRepoImpl)
-	note := model.Note{}	
+	note := model.Note{}
 	json.Unmarshal([]byte(data), &note)
 	note.Title = "[Editted] " + note.Title
 	noteRepo.On("Update", id, note).Return(nil)
 	// 2  Mock function
 	err := NoteUpdate(ctx, noteRepo)
-	// 3. Kiem tra ket qua la dung nhu mong doi	
+	// 3. Kiem tra ket qua la dung nhu mong doi
 	if err != nil {
 		t.Error("This should not be error")
 	}
@@ -178,10 +193,10 @@ func Test_NoteUpdate_TitleMaxLengthCorrectDBError(t *testing.T) {
 	// 1. Tinh huong test pass validation (<255)
 	// 2. Nhung sau do cai ham xu ly lam cho cai Title > 255
 	title := fakeString(255)
-	id:= 1
+	id := 1
 	data := `{"title": "` + title + `","completed": false}`
 	ctx := buildMockContext("PUT", "/note/"+strconv.Itoa(id), data)
-	ctx.Params = append(ctx.Params,gin.Param{"id", strconv.Itoa(id)})
+	ctx.Params = append(ctx.Params, gin.Param{"id", strconv.Itoa(id)})
 	noteRepo := new(mock.NoteRepoImpl)
 	// 2  Mock function
 	err := NoteUpdate(ctx, noteRepo)
@@ -189,5 +204,46 @@ func Test_NoteUpdate_TitleMaxLengthCorrectDBError(t *testing.T) {
 	expectedErr := errors.New(`Error 1406: Data too long for column 'title' at row 1`)
 	if err == nil || err.Error() != expectedErr.Error() {
 		t.Error("Expected error should be DB error")
+	}
+}
+
+func Test_NoteGet_With_Found(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	// 1. Chuan bi input dau vao cho ham CreateNote
+	data := `{}`
+	ctx := buildMockContext("GET", "/note/49", data)
+	ctx.Params = gin.Params{gin.Param{
+		Key:   "id",
+		Value: "49",
+	}}
+	noteRepo := new(mock.NoteRepoImpl)
+	out := &model.Note{}
+	out.ID = 49
+	noteRepo.On("Find", 49).Return(out, nil)
+	// 2. Goi function can test
+	note, _ := NoteGet(ctx, noteRepo)
+	// 3. Kiem tra ket qua la dung nhu mong doi
+	if note.ID != 49 {
+		t.Fail()
+	}
+}
+
+func Test_NoteGet_With_Not_Found(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	// 1. Chuan bi input dau vao cho ham CreateNote
+	data := `{}`
+	ctx := buildMockContext("GET", "/note/50", data)
+	ctx.Params = gin.Params{gin.Param{
+		Key:   "id",
+		Value: "50",
+	}}
+	noteRepo := new(mock.NoteRepoImpl)
+	out := &model.Note{}
+	noteRepo.On("Find", 50).Return(out, errors.New("record not found"))
+	// 2. Goi function can test
+	_, err := NoteGet(ctx, noteRepo)
+	// 3. Kiem tra ket qua la dung nhu mong doi
+	if err == nil {
+		t.Fail()
 	}
 }

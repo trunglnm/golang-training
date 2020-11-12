@@ -26,10 +26,38 @@ protoc -I/usr/local/include -I. \
 --grpc-gateway_out=logtostderr=true:. \
 ./proto/note.proto
 
+## Cau 3nd:
+
+docker run --rm -v $(pwd):$(pwd) -w $(pwd) znly/protoc --go_out=plugins=grpc:. -I. proto/note.proto
+
+docker run --rm -v $(pwd):$(pwd) -w $(pwd) znly/protoc --grpc-gateway_out=logtostderr=true:. -I. proto/note.proto
+
+### For gogoproto.moretags
+
+```proto
+syntax = "proto3";
+
+package note;
+
+import "google/protobuf/timestamp.proto";
+import "google/api/annotations.proto";
+
+# Import cai nay
+# Neu khong proto/note.proto:25:21: Option "(gogoproto.moretags)" unknown.
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+```
+docker run --rm -v $(pwd):$(pwd) -w $(pwd) znly/protoc --gogo_out=plugins=grpc:. -I. proto/note.proto 
+
 ## Build
 
 ```shell
 $ go build -o server_default server/main.go
 $ go build -o client_default client/main.go
+```
+
+## Gateway
+
+```
+curl -XDELETE http://localhost:8080/note/123
 ```
 
